@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import unicodedata
 import os.path
 import re

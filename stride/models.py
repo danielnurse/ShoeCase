@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from pymodm import (
     MongoModel as PyMongoModel, 
     EmbeddedMongoModel, 
