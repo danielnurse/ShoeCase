@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
-import logging
-import sys
-
-
-from providers.provider import BaseProvider, product_detail_structure, product_listing_structure
 from functools import partial
-# from common import util as utils
 import utils
 import json
 import re
-
-LOG = logging.getLogger(__name__)
+from providers.provider import BaseProvider, product_detail_structure, product_listing_structure
 
 
 PROVIDER_UID = "zalando"
+
 
 class Provider_ProductDetail(BaseProvider):
 
@@ -24,7 +18,7 @@ class Provider_ProductDetail(BaseProvider):
     }
 
     def extract_product_detail_info(self, entry):
-        """Parrse Product Detail Data"""
+        """Extract Product Detail Data"""
         docx = entry.get('htmlx', None)
         if not docx or entry.get('_parser_error', False):
             return
@@ -53,10 +47,14 @@ class Provider_ProductDetail(BaseProvider):
 
     @product_detail_structure(PROVIDER_UID)
     def parse_product_detail_item(self, xitem):
+        """Parse HTML for Product Detail Data"""
         item_info = {}
-        pricing = utils.convert_html_price_to_float
         status = True
 
+        # -------------------------------------------------------------------------
+        # Creating shorthands
+        # -------------------------------------------------------------------------
+        pricing = utils.convert_html_price_to_float
         xpaths = self.item_detail_select_xpaths.get
         get_xpath_text = partial(self.get_select_path_text, xitem=xitem, default=None)
         get_xpath_attr = partial(self.get_select_path_attr, xitem=xitem, default=None)
@@ -87,28 +85,10 @@ class Provider_ProductDetail(BaseProvider):
             )
         item_info['on_sale'] = item_info['discount_percentage'] > 0.0
 
-        # # -------------------------------------------------------------------------
-        # # Extract Variants
-        # # -------------------------------------------------------------------------
-        # variants = []
-        # for offer in raw_detail_info.get('offers', []):
-        #     if offer.get('@type') != 'Offer':
-        #         continue
-        #     ioffer = offer.get('itemOffered', {})
-        #     variant = {
-        #         "gtin13": ioffer.get('gtin13'),
-        #         "sku": ioffer.get('sku'),
-        #         "price": pricing(offer.get('price')),
-        #     }
-
-        #     variants.append(variant)
-        # item_info['variants'] = variants
-
         # -------------------------------------------------------------------------
         # Extract Properties
         # -------------------------------------------------------------------------
         extra_props = {}
-
         for prop_line in xitem.select(xpaths('properties')):
             prop_text = getattr(prop_line, 'text', '')
             if not prop_text:
@@ -177,10 +157,14 @@ class Provider_ProductListing(BaseProvider):
 
     @product_listing_structure(PROVIDER_UID)
     def parse_product_listing_item(self, xitem):
+        """Parse HTML for Listed Product Data"""
         item_info = {}
 
+        # -------------------------------------------------------------------------
+        # Creating shorthands
+        # -------------------------------------------------------------------------
         xpaths = self.item_listing_select_xpaths.get
-
+        pricing = utils.convert_html_price_to_float
         get_xpath_text = partial(self.get_select_path_text, xitem=xitem, default=None)
         get_xpath_attr = partial(self.get_select_path_attr, xitem=xitem, default=None)
 
@@ -194,8 +178,6 @@ class Provider_ProductListing(BaseProvider):
         # -------------------------------------------------------------------------
         # Extract Pricing Info
         # -------------------------------------------------------------------------
-        pricing = utils.convert_html_price_to_float
-
         price_info = {}
         price_info['price_special'] = pricing(get_xpath_text(xpath=xpaths('price_special')))
         price_info['price_listing'] = pricing(get_xpath_text(xpath=xpaths('price_listing')))
@@ -207,7 +189,6 @@ class Provider_ProductListing(BaseProvider):
             if price_info['price_normal'] and price_info['price_normal'] > 0.0:
                 price_info['price_discount'] = (1.0 - (price_info['price_special'] / price_info['price_normal']) ) * 100.0
 
-        # item_info['pricing'] = price_info
         item_info['sale_price'] = price_info['price_listing']
 
         item_info['discount_percentage'] = utils.calcDiscountPercentage(
@@ -224,4 +205,5 @@ class ZalandoProvider(
     Provider_ProductDetail,
     BaseProvider
     ):
+    """Zalando Provider"""
     provider_uid = PROVIDER_UID

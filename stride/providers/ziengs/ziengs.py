@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
-import logging
-import sys
-
-
-from providers.provider import BaseProvider, product_detail_structure, product_listing_structure
 from functools import partial
-# from common import util as utils
 import utils
 import json
 import re
-
-LOG = logging.getLogger(__name__)
+from providers.provider import BaseProvider, product_detail_structure, product_listing_structure
 
 
 PROVIDER_UID = "ziengs"
+
 
 class Provider_ProductDetail(BaseProvider):
 
@@ -26,7 +20,7 @@ class Provider_ProductDetail(BaseProvider):
     }
 
     def extract_product_detail_info(self, entry):
-        """Parrse Product Detail Data"""
+        """Extract Product Detail Data"""
         docx = entry.get('htmlx', None)
         if not docx or entry.get('_parser_error', False):
             return
@@ -55,14 +49,17 @@ class Provider_ProductDetail(BaseProvider):
 
     @product_detail_structure(PROVIDER_UID)
     def parse_product_detail_item(self, xitem):
+        """Parse HTML for Product Detail Data"""
         item_info = {}
-        pricing = utils.convert_html_price_to_float
         status = True
 
+        # -------------------------------------------------------------------------
+        # Creating shorthands
+        # -------------------------------------------------------------------------
         xpaths = self.item_detail_select_xpaths.get
+        pricing = utils.convert_html_price_to_float
         get_xpath_text = partial(self.get_select_path_text, xitem=xitem, default=None)
         get_xpath_attr = partial(self.get_select_path_attr, xitem=xitem, default=None)
-
 
         item_info['sku'] = get_xpath_attr(xpath=xpaths('sku'), attr='value')
         item_info['article_name'] = get_xpath_text(xpath=xpaths('article_name'))
@@ -91,7 +88,9 @@ class Provider_ProductDetail(BaseProvider):
             "normal_price": old_price,
         }
         try:
-            props_container = [x for x in xitem.select('#detailBottom > div  h3') if x.text == 'Extra kenmerken'][0].parent
+            props_container = [
+                x for x in xitem.select('#detailBottom > div h3') if x.text == 'Extra kenmerken'
+            ][0].parent
         except:
             props_container = None
         if props_container:
@@ -134,8 +133,6 @@ class Provider_ProductListing(BaseProvider):
         'detail_page_url': 'div.product > a',
         'brand_name': 'div.product > a > strong.merk',
         'article_type': 'div.product > a > em.soort',
-        # 'article_name': 'div.catalogArticlesList_content div.catalogArticlesList_articleName',
-        
         'price_listing': 'div.product > a > span.prijs',
         'price_special': 'div.product > a > span.prijs > ins',
         'price_normal': 'div.product > a > span.prijs > del',
@@ -194,20 +191,28 @@ class Provider_ProductListing(BaseProvider):
 
     @product_listing_structure(PROVIDER_UID)
     def parse_product_listing_item(self, xitem):
+        """Parse HTML for Listed Product Data"""
         items = []
 
+        # -------------------------------------------------------------------------
+        # Creating shorthands
+        # -------------------------------------------------------------------------
         xitem_attrs = getattr(xitem, 'attrs', {})
-
-        xvariants = [x.attrs.get('data-colorid') for x in xitem.select('div.colorDivItem > ul') if 'data-colorid' in getattr(x, 'attrs', {})]
-
         pricing = utils.convert_html_price_to_float
-
         get_xpath_text = partial(self.get_select_path_text, xitem=xitem, default=None)
         get_xpath_attr = partial(self.get_select_path_attr, xitem=xitem, default=None)
+
+        # -------------------------------------------------------------------------
+        # Get variants
+        # -------------------------------------------------------------------------
+        xvariants = [x.attrs.get('data-colorid') for x in xitem.select('div.colorDivItem > ul') if 'data-colorid' in getattr(x, 'attrs', {})]
 
         normal_price = pricing(get_xpath_text(xpath='div.content > span.offerText'))
         on_sale = 'vanvoor' in xitem_attrs.get('class', [])
 
+        # -------------------------------------------------------------------------
+        # Loop Variants and extract data per variant
+        # -------------------------------------------------------------------------
         for xvar in xvariants:
             item_info = {
                 "on_sale": on_sale,
@@ -216,85 +221,35 @@ class Provider_ProductListing(BaseProvider):
                 "normal_price": normal_price,
             }
 
-            xlink = getattr(xitem.select_one('div.colorDivItem > ul[data-colorid="%s"] a' % (xvar)), 'attrs', {})
-            extra_props['color'] = xlink.get('title')
+            xlink = getattr(
+                xitem.select_one('div.colorDivItem > ul[data-colorid="%s"] a' % (xvar)), 'attrs',
+                {}
+                )
             item_info['detail_page_url'] = re.sub(r'(../)+', '/',
                 utils.get_url_path(xlink.get('href'))
                 )
-
-
-            item_info['article_name'] = get_xpath_text(xpath='div.content > div[data-colorid="%s"] > a.title' % (xvar))
-            item_info['sale_price'] = pricing(get_xpath_text(xpath='div.content > div[data-colorid="%s"] > span.price' % (xvar)))
-
+            item_info['article_name'] = get_xpath_text(xpath='div.content > div[data-colorid="%s"] > a.title' % (xvar)
+                )
+            item_info['sale_price'] = pricing(
+                get_xpath_text(
+                    xpath='div.content > div[data-colorid="%s"] > span.price' % (xvar)
+                    )
+                )
 
             item_info['discount_percentage'] = utils.calcDiscountPercentage(
                 new_price=item_info['sale_price'],
                 old_price=normal_price,
                 )
 
+            # -------------------------------------------------------------------------
+            # Extra Properties
+            # -------------------------------------------------------------------------
+            extra_props['color'] = xlink.get('title')
             item_info['listing_props'] = extra_props
 
             items.append(dict(item_info))
 
         return items
-
-        # item_info = {}
-
-
-
-        # item_info['detail_page_url'] = utils.get_url_path(get_xpath_attr(
-        #     xpath=xpaths('detail_page_url'),
-        #     attr='href'))
-
-        # xitem_attrs = getattr(xitem, 'attrs', {})
-
-        # try:
-        #     google_data = json.loads(get_xpath_attr(xpath=xpaths('detail_page_url'), attr="data-google"))
-        #     item_info['sku'] = google_data.get('id')
-        #     item_info['article_name'] = google_data.get('name')
-        #     item_info['brand_name'] = google_data.get('brand')
-        #     item_info['sale_price'] = pricing(google_data.get('price'))
-        # except:
-        #     item_info['brand_name'] = get_xpath_text(xpath=xpaths('brand_name'))
-        #     item_info['sku'] = xitem_attrs.get('data-artikel')
-
-        # item_info['article_type'] = get_xpath_text(xpath=xpaths('article_type'))
-
-        # # -------------------------------------------------------------------------
-        # # Extract Pricing Info
-        # # -------------------------------------------------------------------------
-        # price_info = {}
-        # price_info['price_special'] = pricing(get_xpath_text(xpath=xpaths('price_special')))
-        # price_info['price_normal'] = pricing(get_xpath_text(xpath=xpaths('price_normal')))
-        # price_info['price_listing'] = pricing(get_xpath_text(xpath=xpaths('price_listing')))
-
-        # if price_info['price_special'] and price_info['price_special'] < price_info['price_listing']:
-        #     price_info['price_listing'] = price_info['price_special']
-
-        #     if price_info['price_normal'] and price_info['price_normal'] > 0.0:
-        #         price_info['price_discount'] = (1.0 - (price_info['price_special'] / price_info['price_normal']) ) * 100.0
-
-        # if item_info.get('sale_price') is None:
-        #     item_info['sale_price'] = price_info['price_listing']
-
-        # item_info['discount_percentage'] = utils.calcDiscountPercentage(
-        #     new_price=item_info['sale_price'],
-        #     old_price=price_info['price_normal']
-        #     )
-        
-        # item_info['on_sale'] = 'vanvoor' in xitem_attrs.get('class', [])
-
-        # # -------------------------------------------------------------------------
-        # # Extra Props
-        # # -------------------------------------------------------------------------
-        # extra_props = {}
-        # extra_props['overview_position'] = xitem_attrs.get('data-position')
-        # extra_props['badge'] = get_xpath_text(xpath="span.badge > span.badge-label")
-        # extra_props['price_info'] = price_info
-
-        # item_info['listing_props'] = extra_props
-
-        # return item_info
 
 
 class ZiengsProvider(
@@ -302,5 +257,6 @@ class ZiengsProvider(
     Provider_ProductDetail,
     BaseProvider
     ):
+    """Ziengs Provider"""
     provider_uid = PROVIDER_UID
 

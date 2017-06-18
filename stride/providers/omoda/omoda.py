@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
-import logging
-import sys
-
-
-from providers.provider import BaseProvider, product_detail_structure, product_listing_structure
 from functools import partial
-# from common import util as utils
 import utils
 import json
 import re
-
-LOG = logging.getLogger(__name__)
+from providers.provider import BaseProvider, product_detail_structure, product_listing_structure
 
 
 PROVIDER_UID = "omoda"
+
 
 class Provider_ProductDetail(BaseProvider):
 
@@ -27,7 +21,7 @@ class Provider_ProductDetail(BaseProvider):
     }
 
     def extract_product_detail_info(self, entry):
-        """Parrse Product Detail Data"""
+        """Extract Product Detail Data"""
         docx = entry.get('htmlx', None)
         if not docx or entry.get('_parser_error', False):
             return
@@ -56,14 +50,17 @@ class Provider_ProductDetail(BaseProvider):
 
     @product_detail_structure(PROVIDER_UID)
     def parse_product_detail_item(self, xitem):
+        """Parse HTML for Product Detail Data"""
         item_info = {}
-        pricing = utils.convert_html_price_to_float
         status = True
 
+        # -------------------------------------------------------------------------
+        # Creating shorthands
+        # -------------------------------------------------------------------------
+        pricing = utils.convert_html_price_to_float
         xpaths = self.item_detail_select_xpaths.get
         get_xpath_text = partial(self.get_select_path_text, xitem=xitem, default=None)
         get_xpath_attr = partial(self.get_select_path_attr, xitem=xitem, default=None)
-
 
         item_info['sku'] = get_xpath_attr(xpath=xpaths('sku'), attr='content')
         item_info['article_name'] = get_xpath_text(xpath=xpaths('article_name'))
@@ -90,7 +87,6 @@ class Provider_ProductDetail(BaseProvider):
         extra_props = {
             "normal_price": old_price,
         }
-
         for prop_line in xitem.select(xpaths('properties')):
             prop_title = getattr(prop_line.select_one('th'), 'text', '')
             prop_id = self.get_select_path_attr(xitem=prop_line, xpath='td', attr='itemprop', default=prop_title)
@@ -165,11 +161,15 @@ class Provider_ProductListing(BaseProvider):
 
     @product_listing_structure(PROVIDER_UID)
     def parse_product_listing_item(self, xitem):
+        """Parse HTML for Listed Product Data"""
         item_info = {}
 
+        # -------------------------------------------------------------------------
+        # Creating shorthands
+        # -------------------------------------------------------------------------
+        xitem_attrs = getattr(xitem, 'attrs', {})
         xpaths = self.item_listing_select_xpaths.get
         pricing = utils.convert_html_price_to_float
-
         get_xpath_text = partial(self.get_select_path_text, xitem=xitem, default=None)
         get_xpath_attr = partial(self.get_select_path_attr, xitem=xitem, default=None)
 
@@ -177,7 +177,6 @@ class Provider_ProductListing(BaseProvider):
             xpath=xpaths('detail_page_url'),
             attr='href'))
 
-        xitem_attrs = getattr(xitem, 'attrs', {})
 
         try:
             google_data = json.loads(get_xpath_attr(xpath=xpaths('detail_page_url'), attr="data-google"))
@@ -232,5 +231,6 @@ class OmodaProvider(
     Provider_ProductDetail,
     BaseProvider
     ):
+    """Omoda Provider"""
     provider_uid = PROVIDER_UID
 
